@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background-attachment: fixed;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display), var(--font-body), sans-serif;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply rounded-[28px] border border-white/10 bg-white/[0.045] shadow-panel backdrop-blur-xl;
+  }
+
+  .soft-panel {
+    @apply rounded-[24px] border border-white/10 bg-white/[0.03] backdrop-blur-md;
+  }
+
+  .pill {
+    @apply inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium tracking-[0.02em] text-zinc-300;
+  }
+
+  .metric-number {
+    font-variant-numeric: tabular-nums;
+  }
+}
