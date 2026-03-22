@@ -3,6 +3,7 @@ import "server-only";
 import type {
   ApiErrorCode,
   ApiErrorPayload,
+  ArrivalItem,
   ArrivalsApiResponse,
   BusMode,
   ResolvedStop,
@@ -12,15 +13,21 @@ import type {
 } from "@/types/bus";
 import { getPreset, isBusMode } from "@/lib/presets";
 import {
+  extractFirstRouteDisplayName,
   groupArrivalsByRoute,
+  isKnownRouteLabel,
   normalizeArrivalItems,
   normalizeRouteLocations,
   normalizeStopCandidates,
+  pickRouteDisplayName,
+  UNKNOWN_ROUTE_LABEL,
 } from "@/lib/normalize";
+import { pickFirstValue, safeString } from "@/lib/utils";
 import { extractItems, extractResultMeta, parseXml } from "@/lib/xml";
 
 const DATA_GO_KR_BASE_URL = "https://apis.data.go.kr";
 const STOP_CACHE_TTL_MS = 1000 * 60 * 60 * 12;
+const ROUTE_LABEL_CACHE_TTL_MS = 1000 * 60 * 60 * 12;
 
 const resolvedStopCache = new Map<
   string,
@@ -29,6 +36,19 @@ const resolvedStopCache = new Map<
     expiresAt: number;
   }
 >();
+const resolvedRouteLabelCache = new Map<
+  string,
+  {
+    label: string | null;
+    expiresAt: number;
+  }
+>();
+let routeDirectoryCache:
+  | {
+      data: Map<string, string>;
+      expiresAt: number;
+    }
+  | null = null;
 
 const NORMAL_RESULT_CODES = new Set(["0", "00", "200", "INFO-000"]);
 const NORMAL_RESULT_MESSAGE_PATTERNS = [/NORMAL SERVICE/i, /정상/i];
@@ -201,8 +221,226 @@ async function fetchXmlFromApi(
   };
 }
 
+async function tryFetchXmlFromApi(
+  serviceRoot: string,
+  endpoint: string,
+  params: Record<string, string | number | undefined>,
+) {
+  try {
+    return await fetchXmlFromApi(
+      serviceRoot,
+      endpoint,
+      params,
+      "ROUTE_DETAIL_FETCH_FAILED",
+    );
+  } catch {
+    return null;
+  }
+}
+
 function getResolveCacheKey(preset: StopPreset) {
   return `${preset.stopName}:${preset.shortStopId}`;
+}
+
+function getCachedRouteLabel(routeId: string) {
+  const cached = resolvedRouteLabelCache.get(routeId);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.label;
+  }
+
+  return undefined;
+}
+
+function setCachedRouteLabel(routeId: string, label: string | null) {
+  resolvedRouteLabelCache.set(routeId, {
+    label,
+    expiresAt: Date.now() + ROUTE_LABEL_CACHE_TTL_MS,
+  });
+}
+
+function buildRouteDirectory(items: unknown[]) {
+  const routeMap = new Map<string, string>();
+
+  for (const item of items) {
+    const record =
+      item && typeof item === "object"
+        ? (item as Record<string, unknown>)
+        : ({} as Record<string, unknown>);
+    const routeId = safeString(pickFirstValue(record, ["ROUTEID", "routeId"]));
+    const routeLabel = pickRouteDisplayName(record);
+
+    if (routeId && isKnownRouteLabel(routeLabel)) {
+      routeMap.set(routeId, routeLabel);
+    }
+  }
+
+  return routeMap;
+}
+
+async function getRouteDirectoryMap() {
+  if (routeDirectoryCache && routeDirectoryCache.expiresAt > Date.now()) {
+    return routeDirectoryCache.data;
+  }
+
+  const candidates = [
+    {
+      endpoint: "getBusRouteNoList",
+      params: { pageNo: 1, numOfRows: 1000 },
+    },
+    {
+      endpoint: "getBusRouteList",
+      params: { pageNo: 1, numOfRows: 1000 },
+    },
+    {
+      endpoint: "getRouteNoList",
+      params: { pageNo: 1, numOfRows: 1000 },
+    },
+  ] as const;
+
+  for (const candidate of candidates) {
+    const result = await tryFetchXmlFromApi(
+      "/6280000/busRouteService",
+      candidate.endpoint,
+      candidate.params,
+    );
+
+    if (!result) {
+      continue;
+    }
+
+    const routeMap = buildRouteDirectory(extractItems(result.parsed));
+
+    if (routeMap.size > 0) {
+      routeDirectoryCache = {
+        data: routeMap,
+        expiresAt: Date.now() + ROUTE_LABEL_CACHE_TTL_MS,
+      };
+
+      return routeMap;
+    }
+  }
+
+  const emptyMap = new Map<string, string>();
+  routeDirectoryCache = {
+    data: emptyMap,
+    expiresAt: Date.now() + 1000 * 60 * 5,
+  };
+
+  return emptyMap;
+}
+
+async function resolveRouteLabelByRouteId(routeId: string) {
+  const normalizedRouteId = routeId.trim();
+
+  if (!normalizedRouteId) {
+    return null;
+  }
+
+  const cached = getCachedRouteLabel(normalizedRouteId);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const routeInfoCandidates = [
+    {
+      endpoint: "getBusRouteInfoItem",
+      params: { pageNo: 1, numOfRows: 10, routeId: normalizedRouteId },
+    },
+    {
+      endpoint: "getBusRouteInfoItem",
+      params: { pageNo: 1, numOfRows: 10, routeid: normalizedRouteId },
+    },
+    {
+      endpoint: "getRouteInfoItem",
+      params: { pageNo: 1, numOfRows: 10, routeId: normalizedRouteId },
+    },
+  ] as const;
+
+  for (const candidate of routeInfoCandidates) {
+    const result = await tryFetchXmlFromApi(
+      "/6280000/busRouteService",
+      candidate.endpoint,
+      candidate.params,
+    );
+
+    if (!result) {
+      continue;
+    }
+
+    const routeLabel = extractFirstRouteDisplayName(extractItems(result.parsed));
+
+    if (isKnownRouteLabel(routeLabel)) {
+      setCachedRouteLabel(normalizedRouteId, routeLabel);
+      return routeLabel;
+    }
+  }
+
+  const routeDirectory = await getRouteDirectoryMap();
+  const directoryLabel = routeDirectory.get(normalizedRouteId) ?? null;
+
+  if (isKnownRouteLabel(directoryLabel)) {
+    setCachedRouteLabel(normalizedRouteId, directoryLabel);
+    return directoryLabel;
+  }
+
+  const locationLookup = await tryFetchXmlFromApi(
+    "/6280000/busLocationService",
+    "getBusRouteLocation",
+    {
+      pageNo: 1,
+      numOfRows: 50,
+      routeId: normalizedRouteId,
+    },
+  );
+
+  if (locationLookup) {
+    const vehicles = normalizeRouteLocations(
+      extractItems(locationLookup.parsed),
+      normalizedRouteId,
+    );
+    const routeLabel =
+      vehicles.map((vehicle) => vehicle.routeNo).find((label) => isKnownRouteLabel(label)) ??
+      null;
+
+    if (isKnownRouteLabel(routeLabel)) {
+      setCachedRouteLabel(normalizedRouteId, routeLabel);
+      return routeLabel;
+    }
+  }
+
+  setCachedRouteLabel(normalizedRouteId, null);
+  return null;
+}
+
+async function enrichArrivalRouteLabels(items: ArrivalItem[]) {
+  const missingRouteIds = [
+    ...new Set(
+      items
+        .filter((item) => !isKnownRouteLabel(item.routeNo) && item.routeId)
+        .map((item) => item.routeId),
+    ),
+  ];
+
+  if (missingRouteIds.length === 0) {
+    return items.map((item) => ({
+      ...item,
+      routeNo: item.routeNo || UNKNOWN_ROUTE_LABEL,
+    }));
+  }
+
+  const resolvedEntries = await Promise.all(
+    missingRouteIds.map(async (routeId) => [routeId, await resolveRouteLabelByRouteId(routeId)] as const),
+  );
+  const resolvedMap = new Map(
+    resolvedEntries.filter((entry): entry is readonly [string, string] => Boolean(entry[1])),
+  );
+
+  return items.map((item) => ({
+    ...item,
+    routeNo: item.routeNo || resolvedMap.get(item.routeId) || UNKNOWN_ROUTE_LABEL,
+  }));
 }
 
 export function assertBusMode(mode: string | null | undefined): BusMode {
@@ -316,14 +554,15 @@ export async function getArrivalsByMode(mode: BusMode): Promise<ArrivalsApiRespo
     {
       pageNo: 1,
       numOfRows: 300,
-      bstopid: stop.resolvedBstopId,
+      bstopId: stop.resolvedBstopId,
     },
     "ARRIVALS_FETCH_FAILED",
   );
 
   const items = extractItems(parsed);
   const normalized = normalizeArrivalItems(items, stop.resolvedBstopId);
-  const grouped = groupArrivalsByRoute(normalized);
+  const enriched = await enrichArrivalRouteLabels(normalized);
+  const grouped = groupArrivalsByRoute(enriched);
 
   return {
     mode,
@@ -361,7 +600,7 @@ export async function getRouteDetail(
     {
       pageNo: 1,
       numOfRows: 200,
-      routeid: normalizedRouteId,
+      routeId: normalizedRouteId,
     },
     "ROUTE_DETAIL_FETCH_FAILED",
   );

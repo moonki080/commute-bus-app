@@ -9,7 +9,7 @@ import { LoadingState } from "@/components/loading-state";
 import { ModeSwitch } from "@/components/mode-switch";
 import { StopCard } from "@/components/stop-card";
 import { DEFAULT_MODE, STOP_PRESETS } from "@/lib/presets";
-import { formatUpdatedAt } from "@/lib/utils";
+import { cn, formatUpdatedAt } from "@/lib/utils";
 import type {
   ApiErrorPayload,
   ArrivalsApiResponse,
@@ -17,6 +17,34 @@ import type {
 } from "@/types/bus";
 
 const AUTO_REFRESH_MS = 30_000;
+
+const MODE_THEME: Record<
+  BusMode,
+  {
+    shell: string;
+    refreshButton: string;
+    accentText: string;
+    orbPrimary: string;
+    orbSecondary: string;
+  }
+> = {
+  commute: {
+    shell: "from-cyan-300/14 via-sky-200/8 to-transparent",
+    refreshButton:
+      "border-cyan-200/45 bg-cyan-200/25 text-cyan-950 hover:bg-cyan-100/40",
+    accentText: "text-cyan-50",
+    orbPrimary: "bg-cyan-300/30",
+    orbSecondary: "bg-sky-200/20",
+  },
+  return: {
+    shell: "from-rose-300/14 via-orange-200/8 to-transparent",
+    refreshButton:
+      "border-orange-200/45 bg-orange-200/25 text-orange-950 hover:bg-orange-100/40",
+    accentText: "text-orange-50",
+    orbPrimary: "bg-rose-300/28",
+    orbSecondary: "bg-orange-200/22",
+  },
+};
 
 type ViewError = {
   message: string;
@@ -67,6 +95,7 @@ export default function HomePage() {
 
   const activePreset = STOP_PRESETS[mode];
   const activeData = dataByMode[mode] ?? null;
+  const theme = MODE_THEME[mode];
 
   const requestArrivals = useCallback(
     async (targetMode: BusMode, reason: "initial" | "mode" | "manual" | "auto") => {
@@ -161,17 +190,27 @@ export default function HomePage() {
   };
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-md px-4 pb-10 pt-6">
-      <div className="space-y-4">
-        <header className="glass-panel flex items-start justify-between gap-4 p-5">
+    <main className="relative mx-auto min-h-screen w-full max-w-md overflow-hidden px-4 pb-10 pt-6">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-64">
+        <div className={cn("absolute -left-10 top-2 h-40 w-40 rounded-full blur-3xl", theme.orbPrimary)} />
+        <div className={cn("absolute right-0 top-10 h-44 w-44 rounded-full blur-3xl", theme.orbSecondary)} />
+      </div>
+
+      <div className="relative space-y-4">
+        <header
+          className={cn(
+            "glass-panel flex items-start justify-between gap-4 bg-gradient-to-br p-5",
+            theme.shell,
+          )}
+        >
           <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">
+            <p className="text-xs uppercase tracking-[0.22em] text-slate-100/80">
               Commute Bus ETA
             </p>
             <h1 className="mt-2 text-xl font-bold tracking-tight text-white">
               출퇴근 버스 도착
             </h1>
-            <p className="mt-2 text-sm text-zinc-400">
+            <p className={cn("mt-2 text-sm font-medium", theme.accentText)}>
               {activeData
                 ? `${formatUpdatedAt(activeData.updatedAt)} 기준 갱신`
                 : "실시간 도착예정 조회"}
@@ -182,7 +221,10 @@ export default function HomePage() {
             type="button"
             onClick={() => void requestArrivals(mode, "manual")}
             disabled={isBusy}
-            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+            className={cn(
+              "rounded-2xl border px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
+              theme.refreshButton,
+            )}
           >
             {isRefreshing ? "갱신 중" : "새로고침"}
           </button>
@@ -203,6 +245,7 @@ export default function HomePage() {
         />
 
         <StopCard
+          mode={mode}
           title={renderedStop.title}
           stopName={renderedStop.stopName}
           shortStopId={renderedStop.shortStopId}
@@ -214,14 +257,14 @@ export default function HomePage() {
         <section className="space-y-3">
           <div className="flex items-end justify-between px-1">
             <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-100/80">
                 Arrival Board
               </p>
               <h2 className="mt-1 text-lg font-semibold tracking-tight text-white">
                 가장 빨리 오는 순
               </h2>
             </div>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm font-medium text-slate-100/85">
               {activeData ? `${activeData.totalRoutes}개 노선` : ""}
             </p>
           </div>
@@ -242,7 +285,7 @@ export default function HomePage() {
           {!isLoading && activeData?.arrivals.length ? (
             <div className="space-y-4">
               {activeData.arrivals.map((group) => (
-                <ArrivalCard key={group.routeKey} group={group} />
+                <ArrivalCard key={group.routeKey} group={group} mode={mode} />
               ))}
             </div>
           ) : null}

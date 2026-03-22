@@ -13,12 +13,52 @@ import {
   safeString,
 } from "@/lib/utils";
 
+export const UNKNOWN_ROUTE_LABEL = "노선 정보없음";
+
+const ROUTE_LABEL_CANDIDATE_GROUPS = [
+  ["ROUTE_NO", "ROUTENO", "routeNo", "route_no"],
+  ["ROUTE_NAME", "ROUTENAME", "routeName", "route_name"],
+  ["ROUTE_NM", "ROUTENM", "routeNm", "route_nm"],
+  ["routeno"],
+  ["LINE_NO", "LINENO", "lineNo", "line_no"],
+  ["BUS_NO", "BUSNO", "busNo", "bus_no"],
+  ["LINE", "line"],
+] as const;
+
 function toRecord(item: unknown) {
   if (!item || typeof item !== "object") {
     return {} as Record<string, unknown>;
   }
 
   return item as Record<string, unknown>;
+}
+
+export function pickRouteDisplayName(record: Record<string, unknown>) {
+  for (const candidateGroup of ROUTE_LABEL_CANDIDATE_GROUPS) {
+    const value = safeString(pickFirstValue(record, [...candidateGroup]));
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+export function isKnownRouteLabel(value: string | null | undefined) {
+  return Boolean(value && value.trim() && value !== UNKNOWN_ROUTE_LABEL);
+}
+
+export function extractFirstRouteDisplayName(items: unknown[]) {
+  for (const item of items) {
+    const routeLabel = pickRouteDisplayName(toRecord(item));
+
+    if (isKnownRouteLabel(routeLabel)) {
+      return routeLabel;
+    }
+  }
+
+  return null;
 }
 
 export function normalizeStopCandidates(items: unknown[]) {
@@ -54,18 +94,7 @@ export function normalizeArrivalItems(
       const routeId = safeString(
         pickFirstValue(record, ["ROUTEID", "routeId", "LINE_ID"]),
       );
-      const routeNo =
-        safeString(
-          pickFirstValue(record, [
-            "ROUTENO",
-            "ROUTE_NO",
-            "routeNo",
-            "LINENO",
-            "ROUTENM",
-            "BUSNO",
-            "BUS_NO",
-          ]),
-        ) || "노선 정보없음";
+      const routeNo = pickRouteDisplayName(record);
       const etaSec =
         safeNumber(
           pickFirstValue(record, [
@@ -122,6 +151,7 @@ export function normalizeArrivalItems(
         remainSeat:
           safeNumber(
             pickFirstValue(record, [
+              "REMAIND_SEAT",
               "REMAIN_SEAT",
               "REMAIN_SEAT_CNT",
               "RESTSEATCNT",
@@ -135,7 +165,7 @@ export function normalizeArrivalItems(
     })
     .filter(
       (item) =>
-        (item.routeId || item.routeNo !== "노선 정보없음") &&
+        (item.routeId || isKnownRouteLabel(item.routeNo)) &&
         Number.isFinite(item.etaSec) &&
         item.etaSec >= 0,
     )
@@ -160,10 +190,13 @@ export function groupArrivalsByRoute(items: ArrivalItem[]): ArrivalGroup[] {
   return [...grouped.entries()]
     .map(([routeKey, arrivals]) => {
       const sorted = arrivals.sort((left, right) => left.etaSec - right.etaSec);
+      const routeNo =
+        sorted.map((item) => item.routeNo).find((label) => isKnownRouteLabel(label)) ??
+        UNKNOWN_ROUTE_LABEL;
 
       return {
         routeKey,
-        routeNo: sorted[0]?.routeNo ?? "노선 정보없음",
+        routeNo,
         first: sorted[0],
         second: sorted[1],
       } satisfies ArrivalGroup;
@@ -189,14 +222,7 @@ export function normalizeRouteLocations(
         routeId:
           safeString(pickFirstValue(record, ["ROUTEID", "routeId"])) || routeId,
         routeNo:
-          safeString(
-            pickFirstValue(record, [
-              "ROUTENO",
-              "ROUTE_NO",
-              "routeNo",
-              "LINENO",
-            ]),
-          ) || fallbackRouteNo || "노선 정보없음",
+          pickRouteDisplayName(record) || fallbackRouteNo || UNKNOWN_ROUTE_LABEL,
         busId:
           safeString(
             pickFirstValue(record, ["BUSID", "VEHICLEID", "BUS_ID"]),
@@ -233,6 +259,7 @@ export function normalizeRouteLocations(
         remainSeat:
           safeNumber(
             pickFirstValue(record, [
+              "REMAIND_SEAT",
               "REMAIN_SEAT",
               "REMAIN_SEAT_CNT",
               "RESTSEATCNT",
