@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 
 import { ArrivalCard } from "@/components/arrival-card";
 import { EmptyState } from "@/components/empty-state";
@@ -59,18 +59,23 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const dataByModeRef = useRef<Partial<Record<BusMode, ArrivalsApiResponse>>>({});
+
+  useEffect(() => {
+    dataByModeRef.current = dataByMode;
+  }, [dataByMode]);
 
   const activePreset = STOP_PRESETS[mode];
   const activeData = dataByMode[mode] ?? null;
 
-  const requestArrivals = useEffectEvent(
+  const requestArrivals = useCallback(
     async (targetMode: BusMode, reason: "initial" | "mode" | "manual" | "auto") => {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
 
       const shouldShowBlockingLoading =
-        reason === "initial" || !dataByMode[targetMode];
+        reason === "initial" || !dataByModeRef.current[targetMode];
 
       setError(null);
       if (shouldShowBlockingLoading) {
@@ -112,19 +117,19 @@ export default function HomePage() {
         setIsRefreshing(false);
       }
     },
+    [],
   );
 
-  const requestCurrentMode = useEffectEvent(() => {
-    void requestArrivals(mode, dataByMode[mode] ? "auto" : "initial");
-  });
-
   useEffect(() => {
-    requestCurrentMode();
+    void requestArrivals(
+      mode,
+      dataByModeRef.current[mode] ? "auto" : "initial",
+    );
 
     return () => {
       abortRef.current?.abort();
     };
-  }, [mode]);
+  }, [mode, requestArrivals]);
 
   useEffect(() => {
     const refreshWhenVisible = () => {
@@ -143,7 +148,7 @@ export default function HomePage() {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [mode]);
+  }, [mode, requestArrivals]);
 
   const isBusy = isLoading || isRefreshing;
   const renderedStop = activeData?.stop ?? {
