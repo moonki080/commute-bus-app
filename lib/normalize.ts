@@ -23,6 +23,7 @@ const ROUTE_LABEL_CANDIDATE_GROUPS = [
   ["LINE_NO", "LINENO", "lineNo", "line_no"],
   ["BUS_NO", "BUSNO", "busNo", "bus_no"],
   ["LINE", "line"],
+  ["SHORT_NAME", "SHORTNAME", "shortName", "short_name"],
 ] as const;
 
 function toRecord(item: unknown) {

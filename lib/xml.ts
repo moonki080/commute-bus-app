@@ -25,6 +25,25 @@ const CANDIDATE_ITEM_PATHS = [
   "item",
 ];
 
+const BODY_CONTAINER_PATHS = [
+  "response.body",
+  "response.msgBody",
+  "ServiceResult.msgBody",
+  "body",
+  "msgBody",
+];
+
+const META_FIELD_NAMES = new Set([
+  "numOfRows",
+  "pageNo",
+  "totalCount",
+  "resultCode",
+  "resultMsg",
+  "headerCd",
+  "headerMsg",
+]);
+const META_NODE_NAMES = new Set(["header", "msgHeader", "cmmMsgHeader"]);
+
 export function parseXml(xml: string) {
   return parser.parse(xml);
 }
@@ -47,10 +66,71 @@ function readPath(source: unknown, path: string) {
   }, source);
 }
 
+function extractBodyDataNode(source: unknown): unknown[] {
+  if (!isRecord(source)) {
+    return [];
+  }
+
+  for (const [key, value] of Object.entries(source)) {
+    if (META_NODE_NAMES.has(key)) {
+      continue;
+    }
+
+    if (META_FIELD_NAMES.has(key)) {
+      continue;
+    }
+
+    if (["item", "itemList"].includes(key)) {
+      const directItems = normalizeArray(value);
+      if (directItems.length > 0) {
+        return directItems;
+      }
+    }
+
+    if (Array.isArray(value)) {
+      if (value.length > 0) {
+        return value;
+      }
+      continue;
+    }
+
+    if (!isRecord(value)) {
+      continue;
+    }
+
+    const nestedKeys = Object.keys(value).filter(
+      (nestedKey) => !META_FIELD_NAMES.has(nestedKey),
+    );
+
+    if (
+      nestedKeys.length > 0 &&
+      nestedKeys.some((nestedKey) => !isRecord(value[nestedKey]))
+    ) {
+      return [value];
+    }
+
+    const nestedItems = extractBodyDataNode(value);
+    if (nestedItems.length > 0) {
+      return nestedItems;
+    }
+  }
+
+  return [];
+}
+
 export function extractItems(source: unknown): unknown[] {
   for (const path of CANDIDATE_ITEM_PATHS) {
     const value = readPath(source, path);
     const items = normalizeArray(value);
+
+    if (items.length > 0) {
+      return items;
+    }
+  }
+
+  for (const path of BODY_CONTAINER_PATHS) {
+    const value = readPath(source, path);
+    const items = extractBodyDataNode(value);
 
     if (items.length > 0) {
       return items;
@@ -70,6 +150,11 @@ export function extractItems(source: unknown): unknown[] {
     }
 
     if (isRecord(value)) {
+      const bodyItems = extractBodyDataNode(value);
+      if (bodyItems.length > 0) {
+        return bodyItems;
+      }
+
       const nested = extractItems(value);
       if (nested.length > 0) {
         return nested;

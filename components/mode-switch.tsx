@@ -16,15 +16,15 @@ export function ModeSwitch({
   onChange,
 }: ModeSwitchProps) {
   return (
-    <div className="glass-panel p-2">
+    <div className="glass-panel p-1.5">
       <div className="grid grid-cols-2 gap-2">
         {(Object.keys(STOP_PRESETS) as BusMode[]).map((mode) => {
           const preset = STOP_PRESETS[mode];
           const isActive = mode === activeMode;
           const activeTone =
             mode === "commute"
-              ? "border-cyan-300/80 bg-gradient-to-br from-cyan-300/50 via-sky-300/34 to-white/20 text-slate-950 shadow-[0_18px_45px_rgba(34,211,238,0.28)]"
-              : "border-rose-300/80 bg-gradient-to-br from-rose-300/48 via-orange-300/38 to-white/20 text-slate-950 shadow-[0_18px_45px_rgba(251,146,60,0.24)]";
+              ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-50"
+              : "border-orange-300/35 bg-orange-400/12 text-orange-50";
 
           return (
             <button
@@ -33,37 +33,49 @@ export function ModeSwitch({
               onClick={() => onChange(mode)}
               disabled={disabled}
               className={cn(
-                "rounded-[24px] border px-5 py-5 text-left transition duration-200",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/70 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent",
+                "rounded-[16px] border px-4 py-3 text-left transition duration-200",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent",
                 isActive
                   ? activeTone
-                  : "border-white/15 bg-white/10 text-white hover:border-white/30 hover:bg-white/20",
+                  : "border-white/10 bg-transparent text-slate-200 hover:border-white/20 hover:bg-white/5",
                 disabled && "cursor-not-allowed opacity-60",
               )}
             >
               <div
                 className={cn(
-                  "text-[13px] font-semibold",
-                  isActive ? "text-slate-700" : "text-slate-200/80",
+                  "text-[11px] font-semibold uppercase tracking-[0.16em]",
+                  isActive
+                    ? mode === "commute"
+                      ? "text-cyan-100/80"
+                      : "text-orange-100/80"
+                    : "text-slate-400",
                 )}
               >
-                빠른 전환
+                모드
               </div>
               <div
                 className={cn(
-                  "mt-2 font-display text-[34px] font-bold tracking-tight",
-                  isActive ? "text-slate-950" : "text-white",
+                  "mt-1 font-display text-2xl font-bold tracking-tight",
+                  isActive
+                    ? mode === "commute"
+                      ? "text-cyan-50"
+                      : "text-orange-50"
+                    : "text-white",
                 )}
               >
                 {preset.label}
               </div>
               <div
                 className={cn(
-                  "mt-2 text-xs",
-                  isActive ? "text-slate-700" : "text-slate-200/75",
+                  "mt-1 text-[11px]",
+                  isActive
+                    ? mode === "commute"
+                      ? "text-cyan-100/75"
+                      : "text-orange-100/75"
+                    : "text-slate-400",
                 )}
               >
-                {preset.distanceLabel} 도보 · {preset.stopName}
+                {preset.distanceLabel}
               </div>
             </button>
           );

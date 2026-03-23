@@ -21,28 +21,22 @@ const AUTO_REFRESH_MS = 30_000;
 const MODE_THEME: Record<
   BusMode,
   {
-    shell: string;
+    accentLine: string;
     refreshButton: string;
     accentText: string;
-    orbPrimary: string;
-    orbSecondary: string;
   }
 > = {
   commute: {
-    shell: "from-cyan-300/14 via-sky-200/8 to-transparent",
+    accentLine: "bg-cyan-300",
     refreshButton:
-      "border-cyan-200/45 bg-cyan-200/25 text-cyan-950 hover:bg-cyan-100/40",
-    accentText: "text-cyan-50",
-    orbPrimary: "bg-cyan-300/30",
-    orbSecondary: "bg-sky-200/20",
+      "border-cyan-300/20 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/15",
+    accentText: "text-cyan-200",
   },
   return: {
-    shell: "from-rose-300/14 via-orange-200/8 to-transparent",
+    accentLine: "bg-orange-300",
     refreshButton:
-      "border-orange-200/45 bg-orange-200/25 text-orange-950 hover:bg-orange-100/40",
-    accentText: "text-orange-50",
-    orbPrimary: "bg-rose-300/28",
-    orbSecondary: "bg-orange-200/22",
+      "border-orange-300/20 bg-orange-400/10 text-orange-100 hover:bg-orange-400/15",
+    accentText: "text-orange-200",
   },
 };
 
@@ -190,27 +184,22 @@ export default function HomePage() {
   };
 
   return (
-    <main className="relative mx-auto min-h-screen w-full max-w-md overflow-hidden px-4 pb-10 pt-6">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-64">
-        <div className={cn("absolute -left-10 top-2 h-40 w-40 rounded-full blur-3xl", theme.orbPrimary)} />
-        <div className={cn("absolute right-0 top-10 h-44 w-44 rounded-full blur-3xl", theme.orbSecondary)} />
-      </div>
-
-      <div className="relative space-y-4">
+    <main className="mx-auto min-h-screen w-full max-w-md px-4 pb-8 pt-5">
+      <div className="space-y-3">
         <header
           className={cn(
-            "glass-panel flex items-start justify-between gap-4 bg-gradient-to-br p-5",
-            theme.shell,
+            "glass-panel relative flex items-start justify-between gap-4 p-4",
           )}
         >
+          <div className={cn("absolute inset-x-0 top-0 h-1 rounded-t-[22px]", theme.accentLine)} />
           <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-slate-100/80">
+            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
               Commute Bus ETA
             </p>
-            <h1 className="mt-2 text-xl font-bold tracking-tight text-white">
+            <h1 className="mt-1 text-lg font-bold tracking-tight text-white">
               출퇴근 버스 도착
             </h1>
-            <p className={cn("mt-2 text-sm font-medium", theme.accentText)}>
+            <p className={cn("mt-1 text-[12px] font-medium", theme.accentText)}>
               {activeData
                 ? `${formatUpdatedAt(activeData.updatedAt)} 기준 갱신`
                 : "실시간 도착예정 조회"}
@@ -222,7 +211,7 @@ export default function HomePage() {
             onClick={() => void requestArrivals(mode, "manual")}
             disabled={isBusy}
             className={cn(
-              "rounded-2xl border px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
+              "rounded-xl border px-3 py-2 text-[12px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
               theme.refreshButton,
             )}
           >
@@ -257,14 +246,14 @@ export default function HomePage() {
         <section className="space-y-3">
           <div className="flex items-end justify-between px-1">
             <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-100/80">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
                 Arrival Board
               </p>
-              <h2 className="mt-1 text-lg font-semibold tracking-tight text-white">
+              <h2 className="mt-1 text-base font-semibold tracking-tight text-white">
                 가장 빨리 오는 순
               </h2>
             </div>
-            <p className="text-sm font-medium text-slate-100/85">
+            <p className="text-[12px] font-medium text-slate-300">
               {activeData ? `${activeData.totalRoutes}개 노선` : ""}
             </p>
           </div>

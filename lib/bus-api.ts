@@ -43,6 +43,13 @@ const resolvedRouteLabelCache = new Map<
     expiresAt: number;
   }
 >();
+const stopRouteDirectoryCache = new Map<
+  string,
+  {
+    data: Map<string, string>;
+    expiresAt: number;
+  }
+>();
 let routeDirectoryCache:
   | {
       data: Map<string, string>;
@@ -278,6 +285,38 @@ function buildRouteDirectory(items: unknown[]) {
   return routeMap;
 }
 
+async function getStopRouteDirectoryMap(stopId: string) {
+  const normalizedStopId = stopId.trim();
+
+  if (!normalizedStopId) {
+    return new Map<string, string>();
+  }
+
+  const cached = stopRouteDirectoryCache.get(normalizedStopId);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data;
+  }
+
+  const result = await tryFetchXmlFromApi(
+    "/6280000/busStationService",
+    "getBusStationViaRouteList",
+    {
+      pageNo: 1,
+      numOfRows: 300,
+      bstopId: normalizedStopId,
+    },
+  );
+
+  const routeMap = result ? buildRouteDirectory(extractItems(result.parsed)) : new Map<string, string>();
+  stopRouteDirectoryCache.set(normalizedStopId, {
+    data: routeMap,
+    expiresAt: Date.now() + (routeMap.size > 0 ? ROUTE_LABEL_CACHE_TTL_MS : 1000 * 60 * 5),
+  });
+
+  return routeMap;
+}
+
 async function getRouteDirectoryMap() {
   if (routeDirectoryCache && routeDirectoryCache.expiresAt > Date.now()) {
     return routeDirectoryCache.data;
@@ -415,16 +454,31 @@ async function resolveRouteLabelByRouteId(routeId: string) {
 }
 
 async function enrichArrivalRouteLabels(items: ArrivalItem[]) {
+  const stopIds = [...new Set(items.map((item) => item.stopId).filter(Boolean))];
+  const stopRouteMaps = new Map(
+    await Promise.all(
+      stopIds.map(async (stopId) => [stopId, await getStopRouteDirectoryMap(stopId)] as const),
+    ),
+  );
+
+  const stopResolvedItems = items.map((item) => ({
+    ...item,
+    routeNo:
+      item.routeNo ||
+      stopRouteMaps.get(item.stopId)?.get(item.routeId) ||
+      "",
+  }));
+
   const missingRouteIds = [
     ...new Set(
-      items
+      stopResolvedItems
         .filter((item) => !isKnownRouteLabel(item.routeNo) && item.routeId)
         .map((item) => item.routeId),
     ),
   ];
 
   if (missingRouteIds.length === 0) {
-    return items.map((item) => ({
+    return stopResolvedItems.map((item) => ({
       ...item,
       routeNo: item.routeNo || UNKNOWN_ROUTE_LABEL,
     }));
@@ -437,7 +491,7 @@ async function enrichArrivalRouteLabels(items: ArrivalItem[]) {
     resolvedEntries.filter((entry): entry is readonly [string, string] => Boolean(entry[1])),
   );
 
-  return items.map((item) => ({
+  return stopResolvedItems.map((item) => ({
     ...item,
     routeNo: item.routeNo || resolvedMap.get(item.routeId) || UNKNOWN_ROUTE_LABEL,
   }));

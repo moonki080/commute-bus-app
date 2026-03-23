@@ -22,12 +22,12 @@ const config: Config = {
         display: ["var(--font-display)"],
       },
       boxShadow: {
-        glow: "0 18px 45px rgba(34, 211, 238, 0.18)",
-        panel: "0 18px 45px rgba(15, 23, 42, 0.18)",
+        glow: "0 10px 24px rgba(15, 23, 42, 0.16)",
+        panel: "0 10px 24px rgba(15, 23, 42, 0.22)",
       },
       backgroundImage: {
         "dashboard-glow":
-          "radial-gradient(circle at 12% 12%, rgba(34,211,238,0.18), transparent 24%), radial-gradient(circle at 88% 10%, rgba(251,146,60,0.18), transparent 24%), linear-gradient(180deg, rgba(15,23,42,1) 0%, rgba(30,41,59,1) 52%, rgba(51,65,85,1) 100%)",
+          "radial-gradient(circle at top, rgba(148,163,184,0.14), transparent 26%), linear-gradient(180deg, rgba(30,41,59,1) 0%, rgba(15,23,42,1) 100%)",
       },
     },
   },
