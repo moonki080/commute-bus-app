@@ -11,8 +11,12 @@ import type {
   RouteDetailApiResponse,
   StopPreset,
 } from "@/types/bus";
-import { getPreset, isBusMode } from "@/lib/presets";
-import { convertTm127ToWgs84 } from "@/lib/location";
+import {
+  ALLOWED_ROUTE_LABELS_BY_MODE,
+  getPreset,
+  isBusMode,
+} from "@/lib/presets";
+import { convertTm127ToWgs84 } from "@/lib/stop-coordinates";
 import {
   extractFirstRouteDisplayName,
   groupArrivalsByRoute,
@@ -248,6 +252,10 @@ async function tryFetchXmlFromApi(
 
 function getResolveCacheKey(preset: StopPreset) {
   return `${preset.stopName}:${preset.shortStopId}`;
+}
+
+function normalizeRouteFilterValue(value: string | null | undefined) {
+  return safeString(value).normalize("NFKC").replace(/\s+/g, "").toLowerCase();
 }
 
 function getCachedRouteLabel(routeId: string) {
@@ -498,6 +506,18 @@ async function enrichArrivalRouteLabels(items: ArrivalItem[]) {
   }));
 }
 
+function filterArrivalItemsByMode(items: ArrivalItem[], mode: BusMode) {
+  const allowedRouteSet = new Set(
+    ALLOWED_ROUTE_LABELS_BY_MODE[mode].map((routeNo) =>
+      normalizeRouteFilterValue(routeNo),
+    ),
+  );
+
+  return items.filter((item) =>
+    allowedRouteSet.has(normalizeRouteFilterValue(item.routeNo)),
+  );
+}
+
 export function assertBusMode(mode: string | null | undefined): BusMode {
   if (!isBusMode(mode)) {
     throw new BusApiError(
@@ -558,13 +578,14 @@ export async function resolveStopByPreset(
     );
   }
 
+  const stopCoordinates = convertTm127ToWgs84(matched.posX, matched.posY);
   const resolved: ResolvedStop = {
     ...preset,
     resolvedBstopId: matched.bstopId,
     matchedStopName: matched.stopName || preset.stopName,
     adminName: matched.adminName || undefined,
-    lat: convertTm127ToWgs84(matched.posX, matched.posY)?.lat,
-    lng: convertTm127ToWgs84(matched.posX, matched.posY)?.lng,
+    lat: stopCoordinates?.lat,
+    lng: stopCoordinates?.lng,
   };
 
   resolvedStopCache.set(cacheKey, {
@@ -620,7 +641,8 @@ export async function getArrivalsByMode(mode: BusMode): Promise<ArrivalsApiRespo
   const items = extractItems(parsed);
   const normalized = normalizeArrivalItems(items, stop.resolvedBstopId);
   const enriched = await enrichArrivalRouteLabels(normalized);
-  const grouped = groupArrivalsByRoute(enriched);
+  const filtered = filterArrivalItemsByMode(enriched, mode);
+  const grouped = groupArrivalsByRoute(filtered);
 
   return {
     mode,

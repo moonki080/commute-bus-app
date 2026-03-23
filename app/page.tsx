@@ -8,6 +8,7 @@ import { ErrorState } from "@/components/error-state";
 import { LoadingState } from "@/components/loading-state";
 import { ModeSwitch } from "@/components/mode-switch";
 import { StopCard } from "@/components/stop-card";
+import { SourceFooter } from "@/components/source-footer";
 import {
   formatDistanceLabel,
   hasCoordinates,
@@ -101,7 +102,7 @@ function normalizeClientError(error: unknown): ViewError {
 }
 
 function getDistanceView(
-  stop: Pick<StopViewModel, "lat" | "lng">,
+  stop: Pick<StopViewModel, "lat" | "lng" | "resolvedBstopId">,
   userLocation: Coordinate | null,
   locationStatus: LocationStatus,
 ): DistanceView {
@@ -116,6 +117,13 @@ function getDistanceView(
     return {
       meters: null,
       label: "위치 권한 필요",
+    };
+  }
+
+  if (!stop.resolvedBstopId) {
+    return {
+      meters: null,
+      label: "위치 확인 중",
     };
   }
 
@@ -159,7 +167,6 @@ export default function HomePage() {
     dataByModeRef.current = dataByMode;
   }, [dataByMode]);
 
-  const activePreset = STOP_PRESETS[mode];
   const activeData = dataByMode[mode] ?? null;
   const theme = MODE_THEME[mode];
 
@@ -313,6 +320,12 @@ export default function HomePage() {
   }, [requestUserLocation]);
 
   useEffect(() => {
+    return () => {
+      locationRequestIdRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
     void requestArrivals(
       mode,
       dataByModeRef.current[mode] ? "auto" : "initial",
@@ -388,8 +401,8 @@ export default function HomePage() {
 
   const renderedStop = stopByMode[mode];
   const selectedStopDistanceLabel = distanceByMode[mode].label;
-  const isBusy =
-    isLoading || isRefreshing || locationStatus === "loading";
+  const isDataBusy = isLoading || isRefreshing;
+  const isRefreshBusy = isDataBusy || locationStatus === "loading";
 
   const handleManualRefresh = useCallback(async () => {
     await Promise.all([
@@ -416,7 +429,7 @@ export default function HomePage() {
             </h1>
             <p className={cn("mt-1 text-[12px] font-medium", theme.accentText)}>
               {activeData
-                ? `${formatUpdatedAt(activeData.updatedAt)} 기준 갱신`
+                ? `${formatUpdatedAt(activeData.updatedAt)} 업데이트`
                 : "실시간 도착예정 조회"}
             </p>
           </div>
@@ -424,7 +437,7 @@ export default function HomePage() {
           <button
             type="button"
             onClick={() => void handleManualRefresh()}
-            disabled={isBusy}
+            disabled={isRefreshBusy}
             className={cn(
               "rounded-xl border px-3 py-2 text-[12px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
               theme.refreshButton,
@@ -440,7 +453,7 @@ export default function HomePage() {
             commute: distanceByMode.commute.label,
             return: distanceByMode.return.label,
           }}
-          disabled={isBusy}
+          disabled={isDataBusy}
           onChange={(nextMode) => {
             if (nextMode === mode) {
               return;
@@ -511,6 +524,8 @@ export default function HomePage() {
             />
           ) : null}
         </section>
+
+        <SourceFooter />
       </div>
     </main>
   );

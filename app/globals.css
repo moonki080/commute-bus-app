@@ -4,6 +4,12 @@
 
 :root {
   color-scheme: dark;
+  --font-body:
+    "Apple SD Gothic Neo", "Pretendard Variable", "Pretendard",
+    "Noto Sans KR", "Malgun Gothic", "Segoe UI", sans-serif;
+  --font-display:
+    "SF Pro Display", "Space Grotesk", "Apple SD Gothic Neo",
+    "Pretendard Variable", "Pretendard", "Noto Sans KR", sans-serif;
 }
 
 * {

@@ -77,7 +77,10 @@ export function ModeSwitch({
                     : "text-slate-400",
                 )}
               >
-                {distanceLabels[mode]}
+                <span className="block text-[10px] uppercase tracking-[0.14em]">
+                  현재 거리
+                </span>
+                <span className="block">{distanceLabels[mode]}</span>
               </div>
             </button>
           );

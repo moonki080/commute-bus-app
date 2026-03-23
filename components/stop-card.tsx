@@ -38,23 +38,33 @@ export function StopCard({
   return (
     <section className="glass-panel overflow-hidden p-4">
       <div className="flex items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0 flex-1">
           <p className={cn("text-[11px] font-semibold tracking-[0.18em]", theme.eyebrow)}>
             {title}
           </p>
-          <h1 className="mt-2 max-w-[17ch] text-[24px] font-bold leading-[1.15] tracking-tight text-white">
+          <h1
+            className={cn(
+              "mt-2 overflow-hidden text-[21px] font-bold leading-[1.2] tracking-tight text-white",
+              "[display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]",
+            )}
+          >
             {stopName}
           </h1>
         </div>
-        <div className={cn("rounded-full border px-3 py-2 text-right", theme.badge)}>
+        <div
+          className={cn(
+            "shrink-0 rounded-[18px] border px-3 py-2 text-right",
+            theme.badge,
+          )}
+        >
           <div className="text-[10px] uppercase tracking-[0.16em]">
-            현재 직선 거리
+            현재 거리
           </div>
           <div
             className={cn(
-              "mt-1 max-w-[96px] text-right leading-4",
+              "mt-1 max-w-[92px] text-right leading-4",
               /\d/.test(distanceLabel)
-                ? "metric-number font-display text-lg font-bold"
+                ? "metric-number font-display text-[17px] font-bold"
                 : "text-[12px] font-semibold",
             )}
           >
@@ -63,7 +73,7 @@ export function StopCard({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-3.5 flex flex-wrap gap-2">
         <span className="pill">정류소 {shortStopId}</span>
         <span className={cn("pill", theme.direction)}>
           {directionLabel}
