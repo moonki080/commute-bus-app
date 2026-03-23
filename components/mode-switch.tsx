@@ -6,12 +6,14 @@ import { cn } from "@/lib/utils";
 
 type ModeSwitchProps = {
   activeMode: BusMode;
+  distanceLabels: Record<BusMode, string>;
   disabled?: boolean;
   onChange: (mode: BusMode) => void;
 };
 
 export function ModeSwitch({
   activeMode,
+  distanceLabels,
   disabled = false,
   onChange,
 }: ModeSwitchProps) {
@@ -67,7 +69,7 @@ export function ModeSwitch({
               </div>
               <div
                 className={cn(
-                  "mt-1 text-[11px]",
+                  "mt-1 min-h-8 text-[11px] leading-4",
                   isActive
                     ? mode === "commute"
                       ? "text-cyan-100/75"
@@ -75,7 +77,7 @@ export function ModeSwitch({
                     : "text-slate-400",
                 )}
               >
-                {preset.distanceLabel}
+                {distanceLabels[mode]}
               </div>
             </button>
           );

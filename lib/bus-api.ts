@@ -12,6 +12,7 @@ import type {
   StopPreset,
 } from "@/types/bus";
 import { getPreset, isBusMode } from "@/lib/presets";
+import { convertTm127ToWgs84 } from "@/lib/location";
 import {
   extractFirstRouteDisplayName,
   groupArrivalsByRoute,
@@ -562,6 +563,8 @@ export async function resolveStopByPreset(
     resolvedBstopId: matched.bstopId,
     matchedStopName: matched.stopName || preset.stopName,
     adminName: matched.adminName || undefined,
+    lat: convertTm127ToWgs84(matched.posX, matched.posY)?.lat,
+    lng: convertTm127ToWgs84(matched.posX, matched.posY)?.lng,
   };
 
   resolvedStopCache.set(cacheKey, {
@@ -584,7 +587,6 @@ export async function resolveStopByInput(input: {
     stopName: input.stopName,
     shortStopId: input.shortStopId,
     directionLabel: input.mode ? getPreset(input.mode).directionLabel : "",
-    distanceLabel: input.mode ? getPreset(input.mode).distanceLabel : "",
   };
 
   const resolved = await resolveStopByPreset(preset);
@@ -596,6 +598,8 @@ export async function resolveStopByInput(input: {
     matchedStopName: resolved.matchedStopName,
     resolvedBstopId: resolved.resolvedBstopId,
     adminName: resolved.adminName,
+    lat: resolved.lat,
+    lng: resolved.lng,
   };
 }
 
@@ -626,7 +630,8 @@ export async function getArrivalsByMode(mode: BusMode): Promise<ArrivalsApiRespo
       shortStopId: stop.shortStopId,
       resolvedBstopId: stop.resolvedBstopId,
       directionLabel: stop.directionLabel,
-      distanceLabel: stop.distanceLabel,
+      lat: stop.lat,
+      lng: stop.lng,
     },
     updatedAt: new Date().toISOString(),
     totalRoutes: grouped.length,

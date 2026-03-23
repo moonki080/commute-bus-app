@@ -8,7 +8,6 @@ export const STOP_PRESETS: Record<BusMode, StopPreset> = {
     stopName: "신검단중앙역풍경채어바니티2차",
     shortStopId: "89579",
     directionLabel: "신검단중학교 방면",
-    distanceLabel: "252m",
   },
   return: {
     mode: "return",
@@ -17,7 +16,6 @@ export const STOP_PRESETS: Record<BusMode, StopPreset> = {
     stopName: "신검단중앙역2번출구",
     shortStopId: "89588",
     directionLabel: "신검단중앙역풍경채어바니티 방면",
-    distanceLabel: "1.1km",
   },
 };
 

@@ -8,15 +8,28 @@ import { ErrorState } from "@/components/error-state";
 import { LoadingState } from "@/components/loading-state";
 import { ModeSwitch } from "@/components/mode-switch";
 import { StopCard } from "@/components/stop-card";
+import {
+  formatDistanceLabel,
+  hasCoordinates,
+  haversineDistanceMeters,
+  type Coordinate,
+  type LocationStatus,
+} from "@/lib/location";
 import { DEFAULT_MODE, STOP_PRESETS } from "@/lib/presets";
 import { cn, formatUpdatedAt } from "@/lib/utils";
 import type {
   ApiErrorPayload,
   ArrivalsApiResponse,
   BusMode,
+  ResolvedStopApiResponse,
 } from "@/types/bus";
 
 const AUTO_REFRESH_MS = 30_000;
+const GEOLOCATION_OPTIONS = {
+  enableHighAccuracy: true,
+  timeout: 10_000,
+  maximumAge: 30_000,
+} as const;
 
 const MODE_THEME: Record<
   BusMode,
@@ -43,6 +56,21 @@ const MODE_THEME: Record<
 type ViewError = {
   message: string;
   debugMessage?: string;
+};
+
+type StopViewModel = {
+  title: string;
+  stopName: string;
+  shortStopId: string;
+  directionLabel: string;
+  resolvedBstopId?: string;
+  lat?: number;
+  lng?: number;
+};
+
+type DistanceView = {
+  meters: number | null;
+  label: string;
 };
 
 function normalizeClientError(error: unknown): ViewError {
@@ -72,15 +100,59 @@ function normalizeClientError(error: unknown): ViewError {
   };
 }
 
+function getDistanceView(
+  stop: Pick<StopViewModel, "lat" | "lng">,
+  userLocation: Coordinate | null,
+  locationStatus: LocationStatus,
+): DistanceView {
+  if (locationStatus === "idle" || locationStatus === "loading") {
+    return {
+      meters: null,
+      label: "위치 확인 중",
+    };
+  }
+
+  if (locationStatus === "denied") {
+    return {
+      meters: null,
+      label: "위치 권한 필요",
+    };
+  }
+
+  if (!userLocation || !hasCoordinates(stop)) {
+    return {
+      meters: null,
+      label: "위치 확인 불가",
+    };
+  }
+
+  const meters = haversineDistanceMeters(userLocation, {
+    lat: stop.lat,
+    lng: stop.lng,
+  });
+
+  return {
+    meters,
+    label: formatDistanceLabel(meters),
+  };
+}
+
 export default function HomePage() {
   const [mode, setMode] = useState<BusMode>(DEFAULT_MODE);
   const [dataByMode, setDataByMode] = useState<
     Partial<Record<BusMode, ArrivalsApiResponse>>
   >({});
+  const [resolvedStopsByMode, setResolvedStopsByMode] = useState<
+    Partial<Record<BusMode, ResolvedStopApiResponse>>
+  >({});
   const [error, setError] = useState<ViewError | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [userLocation, setUserLocation] = useState<Coordinate | null>(null);
+  const [locationStatus, setLocationStatus] = useState<LocationStatus>("idle");
+  const [locationErrorMessage, setLocationErrorMessage] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const locationRequestIdRef = useRef(0);
   const dataByModeRef = useRef<Partial<Record<BusMode, ArrivalsApiResponse>>>({});
 
   useEffect(() => {
@@ -90,6 +162,87 @@ export default function HomePage() {
   const activePreset = STOP_PRESETS[mode];
   const activeData = dataByMode[mode] ?? null;
   const theme = MODE_THEME[mode];
+
+  const requestStopMetadata = useCallback(async (targetMode: BusMode) => {
+    const response = await fetch(`/api/stops/resolve?mode=${targetMode}`, {
+      cache: "no-store",
+    });
+    const payload = (await response.json()) as
+      | ResolvedStopApiResponse
+      | ApiErrorPayload;
+
+    if (!response.ok) {
+      throw payload;
+    }
+
+    setResolvedStopsByMode((current) => ({
+      ...current,
+      [targetMode]: payload as ResolvedStopApiResponse,
+    }));
+  }, []);
+
+  const requestUserLocation = useCallback(async () => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (!("geolocation" in navigator)) {
+      setUserLocation(null);
+      setLocationStatus("unavailable");
+      setLocationErrorMessage("브라우저에서 위치 정보를 지원하지 않습니다.");
+      return;
+    }
+
+    const requestId = locationRequestIdRef.current + 1;
+    locationRequestIdRef.current = requestId;
+
+    setLocationStatus("loading");
+    setLocationErrorMessage(null);
+
+    await new Promise<void>((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          if (locationRequestIdRef.current !== requestId) {
+            resolve();
+            return;
+          }
+
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+          setLocationStatus("granted");
+          setLocationErrorMessage(null);
+          resolve();
+        },
+        (error) => {
+          if (locationRequestIdRef.current !== requestId) {
+            resolve();
+            return;
+          }
+
+          setUserLocation(null);
+
+          if (error.code === 1) {
+            setLocationStatus("denied");
+            setLocationErrorMessage("위치 권한이 필요합니다.");
+          } else if (error.code === 2) {
+            setLocationStatus("unavailable");
+            setLocationErrorMessage("현재 위치를 확인할 수 없습니다.");
+          } else if (error.code === 3) {
+            setLocationStatus("error");
+            setLocationErrorMessage("위치 확인 시간이 초과되었습니다.");
+          } else {
+            setLocationStatus("error");
+            setLocationErrorMessage("위치 확인에 실패했습니다.");
+          }
+
+          resolve();
+        },
+        GEOLOCATION_OPTIONS,
+      );
+    });
+  }, []);
 
   const requestArrivals = useCallback(
     async (targetMode: BusMode, reason: "initial" | "mode" | "manual" | "auto") => {
@@ -124,6 +277,18 @@ export default function HomePage() {
           ...current,
           [(payload as ArrivalsApiResponse).mode]: payload as ArrivalsApiResponse,
         }));
+        setResolvedStopsByMode((current) => ({
+          ...current,
+          [(payload as ArrivalsApiResponse).mode]: {
+            mode: (payload as ArrivalsApiResponse).mode,
+            stopName: (payload as ArrivalsApiResponse).stop.stopName,
+            shortStopId: (payload as ArrivalsApiResponse).stop.shortStopId,
+            matchedStopName: (payload as ArrivalsApiResponse).stop.stopName,
+            resolvedBstopId: (payload as ArrivalsApiResponse).stop.resolvedBstopId,
+            lat: (payload as ArrivalsApiResponse).stop.lat,
+            lng: (payload as ArrivalsApiResponse).stop.lng,
+          },
+        }));
         setError(null);
       } catch (caughtError) {
         if (controller.signal.aborted) {
@@ -144,6 +309,10 @@ export default function HomePage() {
   );
 
   useEffect(() => {
+    void requestUserLocation();
+  }, [requestUserLocation]);
+
+  useEffect(() => {
     void requestArrivals(
       mode,
       dataByModeRef.current[mode] ? "auto" : "initial",
@@ -153,6 +322,12 @@ export default function HomePage() {
       abortRef.current?.abort();
     };
   }, [mode, requestArrivals]);
+
+  useEffect(() => {
+    (Object.keys(STOP_PRESETS) as BusMode[]).forEach((targetMode) => {
+      void requestStopMetadata(targetMode).catch(() => undefined);
+    });
+  }, [requestStopMetadata]);
 
   useEffect(() => {
     const refreshWhenVisible = () => {
@@ -173,15 +348,55 @@ export default function HomePage() {
     };
   }, [mode, requestArrivals]);
 
-  const isBusy = isLoading || isRefreshing;
-  const renderedStop = activeData?.stop ?? {
-    title: activePreset.title,
-    stopName: activePreset.stopName,
-    shortStopId: activePreset.shortStopId,
-    directionLabel: activePreset.directionLabel,
-    distanceLabel: activePreset.distanceLabel,
-    resolvedBstopId: undefined,
-  };
+  const stopByMode = (Object.keys(STOP_PRESETS) as BusMode[]).reduce(
+    (result, currentMode) => {
+      const preset = STOP_PRESETS[currentMode];
+      const resolvedStop = resolvedStopsByMode[currentMode];
+      const arrivalStop = dataByMode[currentMode]?.stop;
+
+      result[currentMode] = {
+        title: arrivalStop?.title ?? preset.title,
+        stopName: arrivalStop?.stopName ?? resolvedStop?.stopName ?? preset.stopName,
+        shortStopId:
+          arrivalStop?.shortStopId ??
+          resolvedStop?.shortStopId ??
+          preset.shortStopId,
+        directionLabel: arrivalStop?.directionLabel ?? preset.directionLabel,
+        resolvedBstopId:
+          arrivalStop?.resolvedBstopId ?? resolvedStop?.resolvedBstopId,
+        lat: arrivalStop?.lat ?? resolvedStop?.lat,
+        lng: arrivalStop?.lng ?? resolvedStop?.lng,
+      };
+
+      return result;
+    },
+    {} as Record<BusMode, StopViewModel>,
+  );
+
+  const distanceByMode = (Object.keys(STOP_PRESETS) as BusMode[]).reduce(
+    (result, currentMode) => {
+      result[currentMode] = getDistanceView(
+        stopByMode[currentMode],
+        userLocation,
+        locationStatus,
+      );
+
+      return result;
+    },
+    {} as Record<BusMode, DistanceView>,
+  );
+
+  const renderedStop = stopByMode[mode];
+  const selectedStopDistanceLabel = distanceByMode[mode].label;
+  const isBusy =
+    isLoading || isRefreshing || locationStatus === "loading";
+
+  const handleManualRefresh = useCallback(async () => {
+    await Promise.all([
+      requestArrivals(mode, "manual"),
+      requestUserLocation(),
+    ]);
+  }, [mode, requestArrivals, requestUserLocation]);
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-md px-4 pb-8 pt-5">
@@ -208,7 +423,7 @@ export default function HomePage() {
 
           <button
             type="button"
-            onClick={() => void requestArrivals(mode, "manual")}
+            onClick={() => void handleManualRefresh()}
             disabled={isBusy}
             className={cn(
               "rounded-xl border px-3 py-2 text-[12px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
@@ -221,6 +436,10 @@ export default function HomePage() {
 
         <ModeSwitch
           activeMode={mode}
+          distanceLabels={{
+            commute: distanceByMode.commute.label,
+            return: distanceByMode.return.label,
+          }}
           disabled={isBusy}
           onChange={(nextMode) => {
             if (nextMode === mode) {
@@ -239,9 +458,15 @@ export default function HomePage() {
           stopName={renderedStop.stopName}
           shortStopId={renderedStop.shortStopId}
           directionLabel={renderedStop.directionLabel}
-          distanceLabel={renderedStop.distanceLabel}
+          distanceLabel={selectedStopDistanceLabel}
           resolvedBstopId={renderedStop.resolvedBstopId}
         />
+
+        {locationStatus !== "granted" && locationErrorMessage ? (
+          <p className="px-1 text-[12px] text-slate-400">
+            {locationErrorMessage}
+          </p>
+        ) : null}
 
         <section className="space-y-3">
           <div className="flex items-end justify-between px-1">

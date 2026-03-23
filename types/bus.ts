@@ -9,13 +9,14 @@ export type StopPreset = {
   stopName: string;
   shortStopId: string;
   directionLabel: string;
-  distanceLabel: string;
 };
 
 export type ResolvedStop = StopPreset & {
   resolvedBstopId: string;
   matchedStopName: string;
   adminName?: string;
+  lat?: number;
+  lng?: number;
 };
 
 export type ArrivalItem = {
@@ -51,7 +52,8 @@ export type ArrivalsApiResponse = {
     shortStopId: string;
     resolvedBstopId: string;
     directionLabel: string;
-    distanceLabel: string;
+    lat?: number;
+    lng?: number;
   };
   updatedAt: string;
   totalRoutes: number;
@@ -65,6 +67,8 @@ export type ResolvedStopApiResponse = {
   matchedStopName: string;
   resolvedBstopId: string;
   adminName?: string;
+  lat?: number;
+  lng?: number;
 };
 
 export type RouteLocationItem = {

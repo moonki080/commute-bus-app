@@ -48,9 +48,16 @@ export function StopCard({
         </div>
         <div className={cn("rounded-full border px-3 py-2 text-right", theme.badge)}>
           <div className="text-[10px] uppercase tracking-[0.16em]">
-            도보 거리
+            현재 직선 거리
           </div>
-          <div className="metric-number mt-1 font-display text-lg font-bold">
+          <div
+            className={cn(
+              "mt-1 max-w-[96px] text-right leading-4",
+              /\d/.test(distanceLabel)
+                ? "metric-number font-display text-lg font-bold"
+                : "text-[12px] font-semibold",
+            )}
+          >
             {distanceLabel}
           </div>
         </div>

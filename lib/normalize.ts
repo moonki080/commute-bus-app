@@ -80,6 +80,12 @@ export function normalizeStopCandidates(items: unknown[]) {
         adminName: safeString(
           pickFirstValue(record, ["ADMINNM", "adminNm", "DISTRICT_NM"]),
         ),
+        posX:
+          safeNumber(pickFirstValue(record, ["POSX", "posX", "XPOS"])) ??
+          undefined,
+        posY:
+          safeNumber(pickFirstValue(record, ["POSY", "posY", "YPOS"])) ??
+          undefined,
       };
     })
     .filter((item) => item.bstopId && item.shortStopId);
